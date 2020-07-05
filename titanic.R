@@ -1,31 +1,39 @@
-####### Getting Packages ############
-
-required_packages = c("plyr","data.table","dplyr","DT","dbscan","randomForest","vcd"
-                      ,"grid","dummies")
-
-
-
-## Check for installed packages and install missing ones
+# Cleaning environment:
+rm(list = ls(all.names = TRUE))
+# Installing/Loading the renv package
+if (!('renv' %in% installed.packages())) install.packages('renv')
+library(renv)
+# renv::init()
+# Getting Packages
+required_packages = c("plyr",
+                      "dplyr",
+                      "data.table",
+                      "randomForest",
+                      "dummies")
+# Check for installed packages and install missing ones
 new_packages = required_packages[!(required_packages %in% installed.packages()[,"Package"])]
 if(length(new_packages)) install.packages(new_packages, dependencies = TRUE)
 
-## Load necessary packages
-lapply(required_packages, require, character.only = TRUE)
+# Load necessary packages
+lapply(required_packages, library, character.only = TRUE)
 print("Loading Packages Done.")
 
-###### Adding some usefuls functions #############
+# data path
+data.path <- paste0(getwd(),'/titanicdata')
+
+# Outliers function
 options(stringsAsFactors = FALSE)
 detect_outlier<-function(datatable,n,features){
-  #need library("plyr","data.table")
+  # need library("plyr","data.table")
   outlier_indices<-c()
   dt_outlier_indices<-data.table()
   datatable$index<-rownames(datatable)
   for (val in features){
     Q1<-quantile(datatable[!is.na(datatable[[val]])][[val]],.25)
     Q3<-quantile(datatable[!is.na(datatable[[val]])][[val]],.75)
-    #interquantile range
+    # interquantile range
     IQR<-Q3-Q1
-    #outlier step
+    # outlier step
     outlier_step<-1.5*IQR
     if(empty(datatable[datatable[[val]]<Q1-outlier_step | datatable[[val]]>Q3+outlier_step,c("index")])){
       outlier_list_col<-0
@@ -36,29 +44,72 @@ detect_outlier<-function(datatable,n,features){
     
   }
   dt_outlier_indices<-data.table(as.numeric(unlist(outlier_indices)))
-  dt_outlier_indices<-dt_outlier_indices[,.N,by=V1][N>n] #choose to keep outliers in more than n features
+  dt_outlier_indices<-dt_outlier_indices[,.N,by=V1][N>n] # choose to keep outliers in more than n features
   datatable[as.numeric(rownames(datatable)) %in% dt_outlier_indices$V1]
 }
-
+# Filling with NA
 check_na_blank<-function(datatable){
   for(j in seq_along(datatable)){
     if(!empty(datatable[datatable[[j]]=="" | datatable[[j]]==" " | is.na(datatable[[j]]), ])){
-      set(datatable, i=which(datatable[[j]]==""), j=j, value=NA)
-      set(datatable, i=which(datatable[[j]]==" "), j=j, value=NA)
+      data.table::set(datatable, i=which(datatable[[j]]==""), j=j, value=NA)
+      data.table::set(datatable, i=which(datatable[[j]]==" "), j=j, value=NA)
       print(paste("Replacing ' '/ '' to NA in",colnames(datatable)[j]))
     }
   }
 }
-print("Loading Lib Done.")
 
-
-
-df_train<-data.table(read.csv('../input/train.csv',stringsAsFactors = F))
-outliers<-detect_outlier(df_train,2,c("Age","SibSp","Parch","Fare"))
+df_train<-data.table(read.csv(paste0(data.path,'/train.csv'),stringsAsFactors = F))
+# outliers<-detect_outlier(df_train,2,c("Age","SibSp","Parch","Fare"))
 df_train<-df_train[!as.numeric(rownames(df_train)) %in% outliers$PassengerId]
-df_test<-data.table(read.csv('../input/test.csv',stringsAsFactors = F))
+df_test<-data.table(read.csv(paste0(data.path,'/test.csv'),stringsAsFactors = F))
 full_data<-bind_rows(df_train,df_test)
 check_na_blank(full_data)
+
+# Fix errors
+# https://www.kaggle.com/c/titanic/discussion/39787
+# Abott family
+full_data$SibSp[full_data$PassengerId==280] <- 0
+full_data$Parch[full_data$PassengerId==280] <- 2
+full_data$SibSp[full_data$PassengerId==1284] <- 1
+full_data$Parch[full_data$PassengerId==1284] <- 1
+# Ford family
+full_data$Age[full_data$PassengerId==1737] <- 55
+# Ford, Mr. William Neal
+full_data$SibSp[full_data$PassengerId==87] <- 3
+full_data$Parch[full_data$PassengerId==87] <- 1
+# Ford, Miss. Robina Maggie "Ruby"
+full_data$SibSp[full_data$PassengerId==148] <- 3 
+full_data$Parch[full_data$PassengerId==148] <- 1
+# Ford, Miss. Doolina Margaret "Daisy"
+full_data$SibSp[full_data$PassengerId==437] <- 3 
+full_data$Parch[full_data$PassengerId==437] <- 1
+# Ford, Mrs. Edward (Margaret Ann Watson)
+full_data$SibSp[full_data$PassengerId==737] <- 0 
+full_data$Parch[full_data$PassengerId==737] <- 4
+# Ford, Mr. Edward Watson
+full_data$SibSp[full_data$PassengerId==1059] <- 3 
+full_data$Parch[full_data$PassengerId==1059] <- 1
+# Ford, Mr. Arthur PassengerId==1181 does not belong to the Ford's family
+# https://www.encyclopedia-titanica.org/titanic-victim/margaret-ann-watson-ford.html
+
+# Cavendish, Mrs. Tyrell William (Julia Florence Siegel)
+full_data$Age[full_data$PassengerId==988,] <- 26
+
+# Samaan family
+# https://www.encyclopedia-titanica.org/titanic-victim/hanna-elias-samaan.html
+# Ages are filled from the public record manuscript
+# Samaan, Mr. Hanna male (the father)
+full_data$Age[full_data$PassengerId==1189,] <- 40
+full_data$SibSp[full_data$PassengerId==1189,] <- 0 
+full_data$Parch[full_data$PassengerId==1189,] <- 2
+# Samaan, Mr. Elias
+full_data$Age[full_data$PassengerId==921,] <- 18
+full_data$SibSp[full_data$PassengerId==921,] <- 1 
+full_data$Parch[full_data$PassengerId==921,] <- 1
+# Samaan, Mr. Youssef
+full_data$Age[full_data$PassengerId==49,] <- 16 
+full_data$SibSp[full_data$PassengerId==49,] <- 1 
+full_data$Parch[full_data$PassengerId==49,] <- 1
 
 #################################################################### Titles #####################################################
 full_data$Titre<-gsub('(.*, )|(\\..*)', '',full_data$Name)

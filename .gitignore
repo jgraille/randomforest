@@ -1,0 +1,13 @@
+.RData
+.Ruserdata
+.Rhistory
+.Rprofile
+.Rproj.user/*
+.vscode/*
+allstates.R
+allstatesclaims.py
+titanic.zip
+.gitignore
+renv
+renv.lock
+randomforest.Rproj
